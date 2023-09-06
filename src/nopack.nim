@@ -136,8 +136,9 @@ proc copy() {.raises: [OSError, IOError].} =
   for line in lines(list):
     var f = line.folder()
     if not f.extern:
-      f.src = "data" / f.src
+      f.src = "pack" / f.src
     # Copy Folder to Destination
+    f.dst = "data" / f.dst
     copyDir(f.src, f.dst)
 
 # ---------
