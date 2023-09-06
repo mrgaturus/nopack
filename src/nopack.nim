@@ -25,12 +25,18 @@ proc nopack_load_dealloc(chunk: PImageChunk)
 {.pop.} # importc
 {.pop.} # header
 
-# ------------------
-# Error IO Exception
-# ------------------
+# -----------------
+# Reporting Helpers
+# -----------------
 
 proc error(filename, msg: string) {.raises: [IOError].} =
   raise newException(IOError, filename & " " & msg)
+
+proc msgInfo(reason, msg: string) =
+  echo "\e[1;34m[", reason, "]\e[00m ", msg
+
+proc msgError(reason, msg: string) =
+  echo "\e[1;31m[", reason, "]\e[00m ", msg
 
 # ----------------
 # File I/O Helpers
@@ -101,7 +107,8 @@ proc pack(isRGBA = false) {.raises: [IOError].} =
     let 
       info = info(line)
       chunk = rasterize(info.file, info.fit, isRGBA)
-    echo "[PACKED] " & line
+    # Debug Information
+    msgInfo("PACK", line)
     # Write Chunk to File
     write(pack, chunk)
     nopack_load_dealloc(chunk)
@@ -117,9 +124,6 @@ proc folder(line: string): tuple[src, dst: string, extern: bool] =
   # Check if Path is Valid
   if s.len != 2 and s1.len != 2:
     error(line, "invalid path")
-  # Check Source Path Existence
-  if not s1[0].dirExists:
-    error(s1[0], "don't exists")
   # Extract Paths
   result.src = s1[0]
   result.dst = s1[1]
@@ -137,6 +141,12 @@ proc copy() {.raises: [OSError, IOError].} =
     var f = line.folder()
     if not f.extern:
       f.src = "pack" / f.src
+    # Check Source Path Existence
+    if not dirExists(f.src):
+      error(f.src, "not found")
+    # Debug Information
+    let sym = if f.extern: " >> " else: " -> "
+    msgInfo("COPY", f.src & sym & "data" / f.dst)
     # Copy Folder to Destination
     f.dst = "data" / f.dst
     copyDir(f.src, f.dst)
@@ -147,18 +157,22 @@ proc copy() {.raises: [OSError, IOError].} =
 
 proc main() =
   echo "nogui data packer 0.2"
-  echo "mrgaturus 2023"
+  echo "mrgaturus 2023 \n"
   try:
     # Clear Data Folder
+    echo "Creating data folder..."
     removeDir("data")
     createDir("data")
-    # Pack and Copy
-    pack(); copy()
+    # Pack Icons and Copy Paths
+    echo "Packing icons.dat..."; pack()
+    echo "\nCopying paths..."; copy()
   except IOError as error:
-    echo "[ERROR] ", error.msg
+    msgError("IO ERROR", error.msg)
+    removeDir("data")
     quit(65535)
   except OSError as error:
-    echo "[OS ERROR]", error.msg
+    msgError("OS ERROR", error.msg)
+    removeDir("data")
     quit(32767)
 
 when isMainModule:
