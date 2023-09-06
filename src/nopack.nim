@@ -148,6 +148,9 @@ proc main() =
   echo "nogui data packer 0.2"
   echo "mrgaturus 2023"
   try:
+    # Clear Data Folder
+    removeDir("data")
+    createDir("data")
     # Pack and Copy
     pack(); copy()
   except IOError as error:
