@@ -1,6 +1,6 @@
 from os import 
   fileExists, `/`, copyDir,
-  existsOrCreateDir, dirExists
+  removeDir, createDir, dirExists
 from strutils import parseInt, split, endsWith
 
 {.compile: "nopack.c".}
@@ -25,27 +25,28 @@ proc nopack_load_dealloc(chunk: PImageChunk)
 {.pop.} # importc
 {.pop.} # header
 
+# ------------------
+# Error IO Exception
+# ------------------
+
+proc error(filename, msg: string) {.raises: [IOError].} =
+  raise newException(IOError, filename & " " & msg)
+
 # ----------------
 # File I/O Helpers
 # ----------------
 
-{.push raises: [IOError].}
-
 proc listfile(filename: string): File =
   if not open(result, filename, fmRead):
-    raise newException(IOError, filename & " not found")
+    error(filename, " not found")
 
 proc packfile(filename: string): File =
   if not open(result, filename, fmWrite):
-    raise newException(IOError, filename & " not writtable")
-
-{.pop.}
+    error(filename, " not writtable")
 
 # -----------------
 # Icon Chunk Writer
 # -----------------
-
-{.push raises: [IOError].}
 
 proc header(file: File, isRGBA: bool) =
   const
@@ -58,25 +59,25 @@ proc header(file: File, isRGBA: bool) =
     NOGUIRgbSignature
   else: NOGUIAlphaSignature
   if writeBuffer(file, addr signature, sizeof UInt64Size) != UInt64Size:
-    raise newException(IOError, "illformed signature")
+    error("icons.dat", "illformed signature")
 
 proc rasterize(filename: string, fit: cshort, isRGBA: bool): PImageChunk =
   # Check if File Exists
   if not fileExists(filename):
-    raise newException(IOError, "not found")
+    error(filename, "not found")
   # Check Filename type
   result = if filename.endsWith(".svg"):
     nopack_load_svg(filename, fit, cint isRGBA)
   else: nopack_load_bitmap(filename, fit, cint isRGBA)
   # Check if file was loaded
   if isNil(result):
-    raise newException(IOError, filename & " is invalid")
+    error(filename, "is invalid")
 
 proc write(file: File, chunk: PImageChunk) =
   let bytes = sizeof(ImageChunk) + int(chunk.bytes)
   # Copy Chunk to File
   if writeBuffer(file, chunk, bytes) != bytes:
-    raise newException(IOError, "writing is illformed")
+    error("icons.dat", "writing is illformed")
 
 proc info(line: string): tuple[file: string, fit: cshort] =
   let s = split(line, " : ")
@@ -86,9 +87,9 @@ proc info(line: string): tuple[file: string, fit: cshort] =
   try: 
     result.fit = cshort parseInt s[1]
   except ValueError:
-    raise newException(IOError, result.file & " invalid fit size")
+    error(result.file, "invalid fit size")
 
-proc pack(isRGBA = false) =
+proc pack(isRGBA = false) {.raises: [IOError].} =
   # Prepare Icons File
   let 
     list = listfile("pack" / "icons.list")
@@ -105,13 +106,9 @@ proc pack(isRGBA = false) =
     write(pack, chunk)
     nopack_load_dealloc(chunk)
 
-{.pop.} # raises
-
 # -------------------
 # Folder Copy Writter
 # -------------------
-
-{.push raises: [IOError].}
 
 proc folder(line: string): tuple[src, dst: string, extern: bool] =
   let 
@@ -119,10 +116,10 @@ proc folder(line: string): tuple[src, dst: string, extern: bool] =
     s1 = split(s[0], "-:-")
   # Check if Path is Valid
   if s.len != 2 and s1.len != 2:
-    raise newException(IOError, line & " invalid path")
+    error(line, "invalid path")
   # Check Source Path Existence
   if not s1[0].dirExists:
-    raise newException(IOError, s1[0] & " don't exists")
+    error(s1[0], "don't exists")
   # Extract Paths
   result.src = s1[0]
   result.dst = s1[1]
@@ -130,9 +127,7 @@ proc folder(line: string): tuple[src, dst: string, extern: bool] =
   try:
     result.extern = parseInt(s[1]) > 0
   except ValueError:
-    raise newException(IOError, result.src & " invalid path mode")
-
-{.pop.}
+    error(result.src, "invalid path mode")
 
 proc copy() {.raises: [OSError, IOError].} =
   # Prepare Folder List
@@ -152,9 +147,9 @@ proc copy() {.raises: [OSError, IOError].} =
 proc main() =
   echo "nogui data packer 0.2"
   echo "mrgaturus 2023"
-  try: 
-    pack() # Pack Icons
-    copy() # Copy Folder
+  try:
+    # Pack and Copy
+    pack(); copy()
   except IOError as error:
     echo "[ERROR] ", error.msg
     quit(65535)
